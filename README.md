@@ -1,5 +1,4 @@
-# Denys Tsinyk - (Personal Website)[https://denystsinyk.github.io/website/]
-
+# Denys Tsinyk - [Personal Website](https://denystsinyk.github.io/website/)
 
 Personal project - feel free to use as inspiration!
 
