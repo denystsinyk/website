@@ -14,14 +14,33 @@ function updateBackgroundImage() {
     const isMobile = window.matchMedia('(max-width: 768px)').matches;
 
     const bgToUse = isMobile ? mobileBg : desktopBg;
-    backgroundDiv.style.backgroundImage = `url('${bgToUse}')`;
+    const currentBg = backgroundDiv.style.backgroundImage;
+    const newBg = `url('${bgToUse}')`;
+
+    // Only update if different to avoid unnecessary repaints
+    if (currentBg !== newBg) {
+        backgroundDiv.style.backgroundImage = newBg;
+    }
+}
+
+// Debounce function for performance
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
 }
 
 // Update on load
 updateBackgroundImage();
 
-// Update on window resize
-window.addEventListener('resize', updateBackgroundImage);
+// Update on window resize with debounce for performance
+window.addEventListener('resize', debounce(updateBackgroundImage, 250));
 
 function typeWriter(element, text, speed = 50) {
     let i = 0;
@@ -42,22 +61,34 @@ function typeWriter(element, text, speed = 50) {
     });
 }
 
+// Store original text globally to preserve it
+let originalAboutText = '';
+
 window.addEventListener('load', function() {
-    content.classList.add('active');
-    document.body.classList.add('content-active');
-
+    // Store the original text before any modifications
     const aboutText = document.querySelector('.section-content p');
-    const originalText = aboutText.textContent;
-    aboutText.classList.add('typing');
+    if (aboutText && !originalAboutText) {
+        originalAboutText = aboutText.textContent;
+    }
 
-    setTimeout(() => {
-        typeWriter(aboutText, originalText, 20).then(() => {
+    // Check localStorage for about section state
+    const aboutClosed = localStorage.getItem('aboutClosed');
+
+    if (!aboutClosed) {
+        content.classList.add('active');
+        document.body.classList.add('content-active');
+        isContentVisible = true;
+
+        if (aboutText) {
+            aboutText.classList.add('typing');
             setTimeout(() => {
-                aboutText.style.transition = 'opacity 1s ease';
-                aboutText.style.opacity = '0';
-            }, 15000);
-        });
-    }, 500);
+                typeWriter(aboutText, originalAboutText, 20);
+                // Removed auto-fade after 15 seconds - let users control when to close
+            }, 500);
+        }
+    } else {
+        isContentVisible = false;
+    }
 });
 
 aboutToggle.addEventListener('click', function(e) {
@@ -69,6 +100,14 @@ aboutToggle.addEventListener('click', function(e) {
         content.classList.add('active');
         document.body.classList.add('content-active');
         localStorage.removeItem('aboutClosed');
+
+        // Run typewriter effect when opening
+        const aboutText = document.querySelector('.section-content p');
+        if (aboutText && originalAboutText) {
+            aboutText.classList.add('typing');
+            aboutText.style.opacity = '1'; // Reset opacity
+            typeWriter(aboutText, originalAboutText, 20);
+        }
     } else {
         content.classList.remove('active');
         document.body.classList.remove('content-active');
@@ -76,34 +115,41 @@ aboutToggle.addEventListener('click', function(e) {
     }
 });
 
+// Consolidated keydown handler
 document.addEventListener('keydown', function(e) {
+    // Handle Escape key to close about section
     if (e.key === 'Escape' && isContentVisible) {
         content.classList.remove('active');
         document.body.classList.remove('content-active');
         isContentVisible = false;
+        localStorage.setItem('aboutClosed', 'true');
+        return;
     }
 
+    // Handle Space/Enter on about toggle
     if ((e.key === ' ' || e.key === 'Enter') && document.activeElement === aboutToggle) {
         e.preventDefault();
         aboutToggle.click();
+        return;
     }
 });
 
-// Mobile touch device detection and handling
-if ('ontouchstart' in window) {
-    document.body.classList.add('touch-device');
+// Detect if device is mobile (touch + small screen)
+const isMobileDevice = () => {
+    return ('ontouchstart' in window || navigator.maxTouchPoints > 0) &&
+           window.matchMedia('(max-width: 768px)').matches;
+};
 
-    aboutToggle.addEventListener('touchend', function(e) {
-        e.preventDefault();
-        this.click();
-    });
+// Mobile sidebar toggle with arrow trigger
+const arrowTrigger = document.querySelector('.arrow-trigger');
+const sidebarRight = document.querySelector('.sidebar-right');
+let sidebarVisible = false;
 
-    // Mobile sidebar toggle with arrow trigger
-    const arrowTrigger = document.querySelector('.arrow-trigger');
-    const sidebarRight = document.querySelector('.sidebar-right');
-    let sidebarVisible = false;
+if (arrowTrigger && sidebarRight) {
+    // Only add mobile touch handlers if on mobile device
+    if (isMobileDevice()) {
+        document.body.classList.add('touch-device');
 
-    if (arrowTrigger && sidebarRight) {
         arrowTrigger.addEventListener('click', function(e) {
             e.preventDefault();
             e.stopPropagation();
@@ -118,7 +164,7 @@ if ('ontouchstart' in window) {
 
         // Close sidebar when tapping outside on mobile
         document.addEventListener('click', function(e) {
-            // Don't close if clicking about toggle or content
+            // Don't close if clicking about toggle or content or color picker
             if (aboutToggle.contains(e.target) || content.contains(e.target)) {
                 return;
             }
@@ -201,29 +247,32 @@ document.addEventListener('click', function(e) {
     }
 });
 
-// Konami Code Easter Egg - Down Down Up Up Left Left Right Right
+// Konami Code Easter Egg - Integrated into main keydown handler
 const konamiCode = ['ArrowDown', 'ArrowDown', 'ArrowUp', 'ArrowUp', 'ArrowLeft', 'ArrowLeft', 'ArrowRight', 'ArrowRight'];
 let konamiIndex = 0;
 
+// Add to existing keydown handler
 document.addEventListener('keydown', function(e) {
-    // Check for Konami code
-    if (e.key === konamiCode[konamiIndex]) {
-        konamiIndex++;
+    // Check for Konami code (only for arrow keys)
+    if (e.key.startsWith('Arrow')) {
+        if (e.key === konamiCode[konamiIndex]) {
+            konamiIndex++;
 
-        if (konamiIndex === konamiCode.length) {
+            if (konamiIndex === konamiCode.length) {
+                konamiIndex = 0;
+
+                // Trigger shake animation
+                document.body.classList.add('shake-mode');
+                console.log('🎮 Easter Egg Activated! Page Shake! 🎮');
+
+                // Remove shake class after animation completes
+                setTimeout(() => {
+                    document.body.classList.remove('shake-mode');
+                }, 500);
+            }
+        } else {
+            // Reset if wrong arrow key pressed
             konamiIndex = 0;
-
-            // Trigger shake animation
-            document.body.classList.add('shake-mode');
-            console.log('🎮 Easter Egg Activated! Page Shake! 🎮');
-
-            // Remove shake class after animation completes
-            setTimeout(() => {
-                document.body.classList.remove('shake-mode');
-            }, 500);
         }
-    } else {
-        // Reset if wrong key pressed
-        konamiIndex = 0;
     }
-});
+}, true); // Use capture phase to not interfere with other handlers
